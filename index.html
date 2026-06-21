@@ -48,7 +48,36 @@
   }
   @keyframes rise { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
 
+  .card.block { position:relative; }
   .block-head { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+
+  /* режим выбора блоков (по долгому нажатию) */
+  .select-overlay { position:absolute; inset:0; border-radius:inherit; display:none; z-index:6;
+    cursor:pointer; -webkit-user-select:none; user-select:none; }
+  body.selecting .select-overlay { display:block; }
+  body.selecting .card.block { transition:outline .12s, transform .12s; }
+  .select-overlay .check { position:absolute; top:12px; right:12px; width:26px; height:26px;
+    border-radius:50%; border:2px solid var(--line2); background:var(--bg2);
+    display:grid; place-items:center; color:transparent; transition:.12s; }
+  .select-overlay .check svg { width:16px; height:16px; }
+  .card.block.selected { outline:2px solid var(--blue); outline-offset:1px; }
+  .card.block.selected .select-overlay { background:rgba(58,123,213,.10); }
+  .card.block.selected .check { background:var(--blue); border-color:var(--blue); color:#fff; }
+  .lp-armed { transform:scale(.98); }
+
+  #selbar { display:none; position:sticky; top:0; z-index:30; gap:12px;
+    align-items:center; justify-content:space-between;
+    padding:12px 16px calc(12px); background:rgba(20,30,40,.96);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line2);
+    padding-top:calc(12px + env(safe-area-inset-top)); }
+  body.selecting #selbar { display:flex; }
+  body.selecting header { display:none; }
+  #selbar .selcount { font-size:15px; color:var(--text); }
+  #selbar #selDelete { background:var(--danger); display:inline-flex; align-items:center; gap:7px; }
+  #selbar #selDelete:hover { background:var(--danger-h); }
+  #selbar #selDelete:disabled { background:var(--line2); }
+  #selbar #selDelete svg { width:17px; height:17px; }
   .blockname {
     font-size:17px; font-weight:650; border:none; background:transparent; color:var(--text);
     padding:6px 8px; flex:1; border-radius:8px; min-width:0;
@@ -186,6 +215,15 @@
   <button id="addBlock">+ Блок</button>
 </header>
 
+<div id="selbar">
+  <button class="ghost" id="selCancel" type="button">Отмена</button>
+  <div class="selcount">Выбрано: <b id="selCount">0</b></div>
+  <button id="selDelete" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+    Удалить
+  </button>
+</div>
+
 <div class="wrap" id="blocks"></div>
 
 <div id="toasts"></div>
@@ -194,9 +232,11 @@
   <div class="card block">
     <div class="block-head">
       <input class="blockname" type="text" placeholder="Название блока (бригады)">
-      <button class="icon delBlock" title="Удалить блок" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
-      </button>
+    </div>
+    <div class="select-overlay">
+      <span class="check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
+      </span>
     </div>
 
     <label>Подрядная организация <span class="hint" style="display:inline">— сохраняется</span></label>

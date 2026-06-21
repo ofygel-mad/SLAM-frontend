@@ -96,6 +96,73 @@ function confirmModal({ title, message = "", summaryRows = null, okText = "OK", 
   });
 }
 
+/* ---------- режим выбора блоков (долгое нажатие) ---------- */
+const selected = new Set();
+let selectionMode = false;
+let lastLongPress = 0;
+
+function setSelecting(on) {
+  selectionMode = on;
+  document.body.classList.toggle("selecting", on);
+  if (!on) {
+    selected.clear();
+    document.querySelectorAll(".card.block.selected").forEach(c => c.classList.remove("selected"));
+  }
+  updateSelbar();
+}
+
+function updateSelbar() {
+  document.getElementById("selCount").textContent = selected.size;
+  document.getElementById("selDelete").disabled = selected.size === 0;
+}
+
+function toggleBlockSelect(id, cardEl) {
+  if (selected.has(id)) { selected.delete(id); cardEl.classList.remove("selected"); }
+  else { selected.add(id); cardEl.classList.add("selected"); }
+  updateSelbar();
+}
+
+function attachLongPress(card, onLong, ms = 500) {
+  let timer = null, sx = 0, sy = 0;
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } card.classList.remove("lp-armed"); };
+  card.addEventListener("pointerdown", e => {
+    if (selectionMode) return;                       // уже в режиме выбора — управляет оверлей
+    if (e.target.closest("input,textarea,button,.seg,a,details,summary")) return; // не мешаем вводу
+    sx = e.clientX; sy = e.clientY;
+    card.classList.add("lp-armed");
+    timer = setTimeout(() => { timer = null; card.classList.remove("lp-armed"); lastLongPress = Date.now(); onLong(); }, ms);
+  });
+  card.addEventListener("pointermove", e => {
+    if (timer && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) cancel();
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => card.addEventListener(ev, cancel));
+}
+
+async function deleteSelected() {
+  if (!selected.size) return;
+  const ids = [...selected];
+  const n = ids.length;
+  const ok = await confirmModal({
+    title: `Удалить ${n} ${plural(n, "блок", "блока", "блоков")}?`,
+    message: "Выбранные бригады и все их сохранённые ФИО будут удалены без возможности восстановления.",
+    okText: `Удалить ${n}`, danger: true,
+  });
+  if (!ok) return;
+  let fail = 0;
+  for (const id of ids) { try { await api("/blocks/" + id, { method: "DELETE" }); } catch (e) { fail++; } }
+  setSelecting(false);
+  await load();
+  if (fail) toast(`Удалено ${n - fail}, с ошибкой ${fail}`, "error", 5000);
+  else toast(`Удалено: ${n}`, "ok");
+}
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
+
 /* ---------- рендер ---------- */
 async function load() {
   try {
@@ -140,9 +207,16 @@ function renderBlock(b) {
     catch (e) { toast(e.message, "error"); ev.currentTarget.disabled = false; }
   });
 
-  el.querySelector(".delBlock").addEventListener("click", async () => {
-    const ok = await confirmModal({ title: "Удалить блок?", message: `Бригада «${b.name || "без названия"}» и все её ФИО будут удалены.`, okText: "Удалить", danger: true });
-    if (ok) { try { await api("/blocks/" + b.id, { method: "DELETE" }); toast("Блок удалён", "ok"); load(); } catch (e) { toast(e.message, "error"); } }
+  // выбор по долгому нажатию
+  if (selected.has(b.id)) el.classList.add("selected");
+  attachLongPress(el, () => {
+    if (!selectionMode) setSelecting(true);
+    if (navigator.vibrate) navigator.vibrate(15);
+    toggleBlockSelect(b.id, el);
+  });
+  el.querySelector(".select-overlay").addEventListener("click", () => {
+    if (Date.now() - lastLongPress < 500) return; // не отменять только что выбранный долгим нажатием
+    toggleBlockSelect(b.id, el);
   });
 
   el.querySelector(".doSubmit").addEventListener("click", () => doSubmit(el, b));
@@ -271,5 +345,8 @@ document.getElementById("addBlock").addEventListener("click", async () => {
   try { await jpost("/blocks", { name }); toast("Блок создан", "ok"); load(); }
   catch (e) { toast(e.message, "error"); }
 });
+
+document.getElementById("selCancel").addEventListener("click", () => setSelecting(false));
+document.getElementById("selDelete").addEventListener("click", deleteSelected);
 
 load();
