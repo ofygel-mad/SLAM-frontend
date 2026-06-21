@@ -10,6 +10,19 @@ const jpatch = (p, body) => api(p, { method: "PATCH", headers: { "Content-Type":
 const debounce = (fn, ms = 600) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const esc = s => (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+/* ---------- SVG-иконки (stroke=currentColor) ---------- */
+const svg = (paths, extra = "") =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${extra}>${paths}</svg>`;
+const ICONS = {
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  doc: svg('<path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>'),
+  ok: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/>'),
+  done: svg('<path d="M5 12l5 5L20 7"/>'),
+  err: svg('<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>'),
+  clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>'),
+  spin: svg('<path d="M12 3a9 9 0 1 0 9 9"/>', ' class="spin"'),
+};
+
 /* ---------- тосты ---------- */
 function toast(message, type = "info", ms = 3200) {
   const box = document.getElementById("toasts");
@@ -90,8 +103,8 @@ async function load() {
     const root = document.getElementById("blocks");
     root.innerHTML = "";
     if (!blocks.length) {
-      root.innerHTML = `<div class="empty"><div class="big">📋</div>
-        Пока нет ни одной бригады.<br>Нажмите <b>«+ Блок»</b>, чтобы создать первую.</div>`;
+      root.innerHTML = `<div class="empty">${ICONS.doc}<div>
+        Пока нет ни одной бригады.<br>Нажмите <b>«+ Блок»</b>, чтобы создать первую.</div></div>`;
       return;
     }
     blocks.forEach(b => root.appendChild(renderBlock(b)));
@@ -157,7 +170,7 @@ function renderWorker(w, index) {
   inp.type = "text"; inp.value = w.full_name; inp.placeholder = "Фамилия Имя Отчество";
   inp.addEventListener("input", debounce(() => jpatch("/workers/" + w.id, { full_name: inp.value }).catch(() => {})));
   const del = document.createElement("button");
-  del.className = "icon"; del.type = "button"; del.textContent = "✕"; del.title = "Удалить";
+  del.className = "icon"; del.type = "button"; del.innerHTML = ICONS.close; del.title = "Удалить";
   del.addEventListener("click", async () => { try { await api("/workers/" + w.id, { method: "DELETE" }); load(); } catch (e) { toast(e.message, "error"); } });
   div.appendChild(num); div.appendChild(inp); div.appendChild(del);
   return div;
@@ -221,12 +234,14 @@ async function pollJob(jobId, el, btn) {
     rbox.innerHTML = "";
     j.results.forEach(r => {
       const cls = r.status === "ok" ? "ok" : r.status === "failed" ? "failed" : r.status === "running" ? "running" : "";
-      const mark = r.status === "ok" ? (r.submitted ? "✅ отправлено" : "✓ заполнено")
-        : r.status === "failed" ? "❌ ошибка"
-        : r.status === "running" ? "⏳ заполняется…" : "⌛ ожидает";
+      let icon, label, mkCls = "mk";
+      if (r.status === "ok") { icon = r.submitted ? ICONS.ok : ICONS.done; label = r.submitted ? "отправлено" : "заполнено"; }
+      else if (r.status === "failed") { icon = ICONS.err; label = "ошибка"; }
+      else if (r.status === "running") { icon = ICONS.spin; label = "заполняется…"; }
+      else { icon = ICONS.clock; label = "ожидает"; mkCls = "mk wait"; }
       const d = document.createElement("div");
       d.className = "res " + cls;
-      d.innerHTML = `<b>${esc(r.full_name) || "—"}</b> — ${mark}`;
+      d.innerHTML = `<b>${esc(r.full_name) || "—"}</b> <span class="${mkCls}">${icon}${esc(label)}</span>`;
       if (r.errors && r.errors.length) d.innerHTML += `<div class="errs">${esc(r.errors.join("\n"))}</div>`;
       if (r.steps && r.steps.length) {
         const det = document.createElement("details");

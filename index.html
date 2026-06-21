@@ -78,8 +78,21 @@
   button.green:hover { background:var(--accent-h); }
   button.ghost { background:transparent; border:1px solid var(--line2); color:var(--muted); font-weight:500; }
   button.ghost:hover { background:var(--card2); color:var(--text); }
-  button.icon { background:transparent; color:var(--muted2); padding:8px; font-size:16px; }
+  button.icon { background:transparent; color:var(--muted2); padding:7px; display:inline-flex;
+    align-items:center; justify-content:center; }
   button.icon:hover { background:var(--card2); color:var(--danger); }
+  button.icon svg { width:18px; height:18px; display:block; }
+
+  /* иконки статусов в результатах */
+  .res .mk { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; font-weight:600; }
+  .res .mk svg { width:16px; height:16px; flex:none; }
+  .res.ok .mk { color:var(--accent); }
+  .res.failed .mk { color:var(--danger); }
+  .res.running .mk { color:var(--blue); }
+  .res .mk.wait { color:var(--muted2); }
+  .spin { animation:spin 1s linear infinite; transform-origin:center; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .empty svg { width:46px; height:46px; opacity:.5; margin-bottom:10px; }
 
   .seg { display:flex; gap:8px; }
   .seg button { flex:1; background:var(--bg2); border:1px solid var(--line); color:var(--muted); font-weight:500; }
@@ -181,7 +194,9 @@
   <div class="card block">
     <div class="block-head">
       <input class="blockname" type="text" placeholder="Название блока (бригады)">
-      <button class="icon delBlock" title="Удалить блок">🗑</button>
+      <button class="icon delBlock" title="Удалить блок" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+      </button>
     </div>
 
     <label>Подрядная организация <span class="hint" style="display:inline">— сохраняется</span></label>
@@ -189,8 +204,8 @@
 
     <label>Тип работ <span class="muted">(вопрос 3)</span></label>
     <div class="seg task">
-      <button data-v="montazh">🔧 Монтаж лесов</button>
-      <button data-v="demontazh">🔩 Демонтаж лесов</button>
+      <button data-v="montazh">Монтаж лесов</button>
+      <button data-v="demontazh">Демонтаж лесов</button>
     </div>
 
     <label>Объект <span class="muted">(вопрос 5)</span></label>
