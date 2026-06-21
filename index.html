@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLAM — автозаполнение</title>
+<style>
+  :root { --bg:#0f1720; --card:#1b2733; --line:#2c3a48; --accent:#2e8b57;
+          --accent2:#3a7bd5; --text:#e8eef3; --muted:#90a0b0; --danger:#c0504d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--bg); color:var(--text); padding-bottom:60px; }
+  header { padding:16px; background:var(--card); position:sticky; top:0; z-index:5;
+           border-bottom:1px solid var(--line); display:flex; justify-content:space-between;
+           align-items:center; }
+  header h1 { font-size:18px; margin:0; }
+  .wrap { max-width:680px; margin:0 auto; padding:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:14px; margin-bottom:16px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row.wrap-row { flex-wrap:wrap; }
+  label { font-size:13px; color:var(--muted); display:block; margin:10px 0 4px; }
+  input[type=text], textarea {
+    width:100%; background:#0f1720; border:1px solid var(--line); color:var(--text);
+    border-radius:9px; padding:11px; font-size:15px; }
+  textarea { min-height:64px; resize:vertical; }
+  .blockname { font-size:17px; font-weight:600; border:none; background:transparent;
+               padding:4px 0; }
+  button { border:none; border-radius:9px; padding:11px 14px; font-size:15px;
+           cursor:pointer; color:#fff; background:var(--accent2); }
+  button.green { background:var(--accent); width:100%; font-weight:600; padding:14px; font-size:16px; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); }
+  button.del { background:transparent; color:var(--danger); padding:8px; }
+  .seg { display:flex; gap:6px; }
+  .seg button { flex:1; background:#0f1720; border:1px solid var(--line); color:var(--muted); }
+  .seg button.active { background:var(--accent2); color:#fff; border-color:var(--accent2); }
+  .worker { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .worker input { flex:1; }
+  .muted { color:var(--muted); font-size:13px; }
+  .results { margin-top:12px; }
+  .res { padding:8px 10px; border-radius:8px; margin-bottom:6px; font-size:14px;
+         background:#0f1720; border-left:4px solid var(--line); }
+  .res.ok { border-left-color:var(--accent); }
+  .res.failed { border-left-color:var(--danger); }
+  .res.running { border-left-color:var(--accent2); }
+  .res .errs { color:#e7a; font-size:12px; margin-top:4px; white-space:pre-wrap; }
+  .bar { height:8px; background:#0f1720; border-radius:6px; overflow:hidden; margin:8px 0; }
+  .bar > div { height:100%; background:var(--accent); width:0%; transition:width .3s; }
+  .spacer { height:8px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:4px; }
+  details pre { white-space:pre-wrap; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>SLAM — автозаполнение</h1>
+  <button id="addBlock">+ Блок</button>
+</header>
+<div class="wrap" id="blocks"></div>
+
+<template id="blockTpl">
+  <div class="card block">
+    <div class="row">
+      <input class="blockname" type="text" placeholder="Название блока (бригады)">
+      <button class="del delBlock" title="Удалить блок">🗑</button>
+    </div>
+
+    <label>Подрядная организация (сохраняется)</label>
+    <input class="company" type="text" placeholder="Например: ТОО «СтройМонтаж»">
+
+    <label>Тип работ (вопрос 3)</label>
+    <div class="seg task">
+      <button data-v="montazh">Монтаж лесов</button>
+      <button data-v="demontazh">Демонтаж лесов</button>
+    </div>
+
+    <label>Объект (вопрос 5)</label>
+    <div class="seg object">
+      <button data-v="sulphide_1">Сульфид 1</button>
+      <button data-v="sulphide_2">Сульфид 2</button>
+    </div>
+
+    <label>Наименование рабочего места (меняется каждый раз, НЕ сохраняется)</label>
+    <textarea class="workplace" placeholder="Где именно проводятся работы"></textarea>
+
+    <label>Бригада (ФИО — сохраняются)</label>
+    <div class="workers"></div>
+    <button class="ghost addWorker">+ Добавить работника</button>
+
+    <div class="spacer"></div>
+    <button class="green doSubmit">Отправить (заполнить за всю бригаду)</button>
+
+    <div class="progressWrap" style="display:none">
+      <div class="bar"><div class="fill"></div></div>
+      <div class="muted progressText"></div>
+      <div class="results"></div>
+    </div>
+  </div>
+</template>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
