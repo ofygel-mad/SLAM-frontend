@@ -187,6 +187,48 @@
   .toast.ok { border-left-color:var(--accent); }
   .toast.err { border-left-color:var(--danger); }
 
+  /* ---- detail-бар (экран одной бригады) ---- */
+  #detailBar { display:none; position:sticky; top:0; z-index:20;
+    align-items:center; gap:6px; padding:10px 12px;
+    padding-top:calc(10px + env(safe-area-inset-top));
+    background:rgba(18,27,36,.9); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line); }
+  body.detail #detailBar { display:flex; }
+  body.detail #appHeader { display:none; }
+  #detailView { display:none; }
+  body.detail #detailView { display:block; }
+  body.detail #listView { display:none; }
+  #detailBar .back { background:transparent; color:var(--text); padding:8px; display:inline-flex; }
+  #detailBar .back:hover { background:var(--card2); }
+  #detailBar .back svg { width:22px; height:22px; }
+  #detailBar .dname { flex:1; font-size:17px; font-weight:650; background:transparent; border:none;
+    color:var(--text); padding:8px 6px; border-radius:8px; min-width:0; }
+  #detailBar .dname:focus { background:var(--bg2); outline:1px solid var(--line2); }
+
+  /* ---- список бригад (главный экран) ---- */
+  .row {
+    display:flex; align-items:center; gap:12px; position:relative;
+    background:linear-gradient(180deg,var(--card),var(--bg2));
+    border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); cursor:pointer; animation:rise .2s ease both;
+    -webkit-user-select:none; user-select:none; transition:transform .1s, border-color .12s;
+  }
+  .row:active { transform:scale(.99); }
+  .row .row-check { width:24px; height:24px; border-radius:50%; border:2px solid var(--line2);
+    background:var(--bg2); display:none; place-items:center; color:transparent; flex:none; transition:.12s; }
+  .row .row-check svg { width:15px; height:15px; }
+  body.selecting .row { cursor:default; }
+  body.selecting .row .row-check { display:grid; }
+  .row.selected { border-color:var(--blue); }
+  .row.selected .row-check { background:var(--blue); border-color:var(--blue); color:#fff; }
+  .row .row-main { flex:1; min-width:0; }
+  .row .row-name { font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .row-sub { font-size:12.5px; color:var(--muted2); margin-top:3px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .row-chevron { color:var(--muted2); flex:none; display:flex; }
+  .row .row-chevron svg { width:20px; height:20px; }
+  body.selecting .row .row-chevron { display:none; }
+
   /* узкие экраны телефонов */
   @media (max-width:480px) {
     .wrap { padding:12px 10px; }
@@ -204,7 +246,7 @@
 </style>
 </head>
 <body>
-<header>
+<header id="appHeader">
   <div class="brand">
     <div class="logo">SL</div>
     <div>
@@ -215,6 +257,16 @@
   <button id="addBlock">+ Блок</button>
 </header>
 
+<div id="detailBar">
+  <button class="back" id="backBtn" type="button" title="Назад">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+  </button>
+  <input class="dname" id="detailName" type="text" placeholder="Название бригады">
+  <button class="icon" id="detailDelete" type="button" title="Удалить бригаду">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+  </button>
+</div>
+
 <div id="selbar">
   <button class="ghost" id="selCancel" type="button">Отмена</button>
   <div class="selcount">Выбрано: <b id="selCount">0</b></div>
@@ -224,21 +276,30 @@
   </button>
 </div>
 
-<div class="wrap" id="blocks"></div>
+<div class="wrap">
+  <div id="listView"></div>
+  <div id="detailView"></div>
+</div>
 
 <div id="toasts"></div>
 
-<template id="blockTpl">
-  <div class="card block">
-    <div class="block-head">
-      <input class="blockname" type="text" placeholder="Название блока (бригады)">
+<template id="rowTpl">
+  <div class="row">
+    <span class="row-check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
+    </span>
+    <div class="row-main">
+      <div class="row-name"></div>
+      <div class="row-sub"></div>
     </div>
-    <div class="select-overlay">
-      <span class="check">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
-      </span>
-    </div>
+    <span class="row-chevron">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+    </span>
+  </div>
+</template>
 
+<template id="detailTpl">
+  <div class="card block">
     <label>Подрядная организация <span class="hint" style="display:inline">— сохраняется</span></label>
     <input class="company" type="text" placeholder="Например: ТОО «СтройМонтаж»">
 

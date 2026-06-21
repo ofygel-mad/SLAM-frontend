@@ -9,8 +9,18 @@ const jpost = (p, body) => api(p, { method: "POST", headers: { "Content-Type": "
 const jpatch = (p, body) => api(p, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const debounce = (fn, ms = 600) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const esc = s => (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const plural = (n, one, few, many) => {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+};
+const objLabel = k => k === "sulphide_2" ? "Сульфидная фабрика 2" : "Сульфидная фабрика 1";
+const objShort = k => k === "sulphide_2" ? "Сульфид 2" : "Сульфид 1";
+const taskLabel = k => k === "demontazh" ? "Демонтаж лесов" : "Монтаж лесов";
+const taskShort = k => k === "demontazh" ? "Демонтаж" : "Монтаж";
 
-/* ---------- SVG-иконки (stroke=currentColor) ---------- */
+/* ---------- SVG-иконки ---------- */
 const svg = (paths, extra = "") =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${extra}>${paths}</svg>`;
 const ICONS = {
@@ -41,7 +51,6 @@ function modal(buildBody) {
     const box = document.createElement("div");
     box.className = "modal";
     overlay.appendChild(box);
-
     const close = (val) => {
       document.removeEventListener("keydown", onKey);
       overlay.style.opacity = "0"; overlay.style.transition = "opacity .15s";
@@ -51,21 +60,16 @@ function modal(buildBody) {
     const onKey = (e) => { if (e.key === "Escape") close(null); };
     document.addEventListener("keydown", onKey);
     overlay.addEventListener("mousedown", e => { if (e.target === overlay) close(null); });
-
     buildBody(box, close);
     document.body.appendChild(overlay);
   });
 }
-
 function promptModal({ title, label, value = "", placeholder = "", okText = "Создать" }) {
   return modal((box, close) => {
     box.innerHTML = `<h3>${esc(title)}</h3>
       <label style="margin-top:4px">${esc(label)}</label>
       <input type="text" class="m-input" placeholder="${esc(placeholder)}">
-      <div class="actions">
-        <button class="ghost m-cancel">Отмена</button>
-        <button class="m-ok">${esc(okText)}</button>
-      </div>`;
+      <div class="actions"><button class="ghost m-cancel">Отмена</button><button class="m-ok">${esc(okText)}</button></div>`;
     const input = box.querySelector(".m-input");
     input.value = value;
     const ok = () => { const v = input.value.trim(); if (!v) { input.classList.add("invalid"); input.focus(); return; } close(v); };
@@ -75,73 +79,61 @@ function promptModal({ title, label, value = "", placeholder = "", okText = "С�
     setTimeout(() => { input.focus(); input.select(); }, 60);
   });
 }
-
 function confirmModal({ title, message = "", summaryRows = null, okText = "OK", danger = false }) {
   return modal((box, close) => {
     let summary = "";
-    if (summaryRows) {
-      summary = `<div class="summary">` + summaryRows.map(([k, v]) =>
-        `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("") + `</div>`;
-    }
-    box.innerHTML = `<h3>${esc(title)}</h3>
-      ${message ? `<p>${esc(message)}</p>` : ""}
-      ${summary}
-      <div class="actions">
-        <button class="ghost m-cancel">Отмена</button>
-        <button class="m-ok" style="background:${danger ? "var(--danger)" : "var(--accent)"}">${esc(okText)}</button>
-      </div>`;
+    if (summaryRows) summary = `<div class="summary">` + summaryRows.map(([k, v]) =>
+      `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("") + `</div>`;
+    box.innerHTML = `<h3>${esc(title)}</h3>${message ? `<p>${esc(message)}</p>` : ""}${summary}
+      <div class="actions"><button class="ghost m-cancel">Отмена</button>
+      <button class="m-ok" style="background:${danger ? "var(--danger)" : "var(--accent)"}">${esc(okText)}</button></div>`;
     box.querySelector(".m-ok").onclick = () => close(true);
     box.querySelector(".m-cancel").onclick = () => close(false);
     setTimeout(() => box.querySelector(".m-ok").focus(), 60);
   });
 }
 
-/* ---------- режим выбора блоков (долгое нажатие) ---------- */
+/* ---------- состояние ---------- */
+let blocksCache = [];
+let currentBlockId = null;
 const selected = new Set();
 let selectionMode = false;
 let lastLongPress = 0;
 
+/* ---------- режим выбора (долгое нажатие в списке) ---------- */
 function setSelecting(on) {
   selectionMode = on;
   document.body.classList.toggle("selecting", on);
   if (!on) {
     selected.clear();
-    document.querySelectorAll(".card.block.selected").forEach(c => c.classList.remove("selected"));
+    document.querySelectorAll(".row.selected").forEach(c => c.classList.remove("selected"));
   }
   updateSelbar();
 }
-
 function updateSelbar() {
   document.getElementById("selCount").textContent = selected.size;
   document.getElementById("selDelete").disabled = selected.size === 0;
 }
-
-function toggleBlockSelect(id, cardEl) {
-  if (selected.has(id)) { selected.delete(id); cardEl.classList.remove("selected"); }
-  else { selected.add(id); cardEl.classList.add("selected"); }
+function toggleBlockSelect(id, el) {
+  if (selected.has(id)) { selected.delete(id); el.classList.remove("selected"); }
+  else { selected.add(id); el.classList.add("selected"); }
   updateSelbar();
 }
-
-function attachLongPress(card, onLong, ms = 500) {
+function attachLongPress(el, onLong, ms = 500) {
   let timer = null, sx = 0, sy = 0;
-  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } card.classList.remove("lp-armed"); };
-  card.addEventListener("pointerdown", e => {
-    if (selectionMode) return;                       // уже в режиме выбора — управляет оверлей
-    if (e.target.closest("input,textarea,button,.seg,a,details,summary")) return; // не мешаем вводу
-    sx = e.clientX; sy = e.clientY;
-    card.classList.add("lp-armed");
-    timer = setTimeout(() => { timer = null; card.classList.remove("lp-armed"); lastLongPress = Date.now(); onLong(); }, ms);
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } el.classList.remove("lp-armed"); };
+  el.addEventListener("pointerdown", e => {
+    if (selectionMode) return;
+    if (e.target.closest("input,textarea,button,.seg,a,details,summary")) return;
+    sx = e.clientX; sy = e.clientY; el.classList.add("lp-armed");
+    timer = setTimeout(() => { timer = null; el.classList.remove("lp-armed"); lastLongPress = Date.now(); onLong(); }, ms);
   });
-  card.addEventListener("pointermove", e => {
-    if (timer && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) cancel();
-  });
-  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => card.addEventListener(ev, cancel));
+  el.addEventListener("pointermove", e => { if (timer && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) cancel(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, cancel));
 }
-
 async function deleteSelected() {
   if (!selected.size) return;
-  const ids = [...selected];
-  const n = ids.length;
+  const ids = [...selected], n = ids.length;
   const ok = await confirmModal({
     title: `Удалить ${n} ${plural(n, "блок", "блока", "блоков")}?`,
     message: "Выбранные бригады и все их сохранённые ФИО будут удалены без возможности восстановления.",
@@ -156,42 +148,90 @@ async function deleteSelected() {
   else toast(`Удалено: ${n}`, "ok");
 }
 
-function plural(n, one, few, many) {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-  return many;
-}
-
-/* ---------- рендер ---------- */
+/* ---------- список бригад (главный экран) ---------- */
 async function load() {
   try {
-    const blocks = await api("/blocks");
-    const root = document.getElementById("blocks");
-    root.innerHTML = "";
-    if (!blocks.length) {
-      root.innerHTML = `<div class="empty">${ICONS.doc}<div>
-        Пока нет ни одной бригады.<br>Нажмите <b>«+ Блок»</b>, чтобы создать первую.</div></div>`;
-      return;
-    }
-    blocks.forEach(b => root.appendChild(renderBlock(b)));
+    blocksCache = await api("/blocks");
+    renderList();
   } catch (e) {
     toast("Не удалось загрузить данные: " + e.message, "error", 5000);
   }
 }
+function renderList() {
+  const root = document.getElementById("listView");
+  root.innerHTML = "";
+  if (!blocksCache.length) {
+    root.innerHTML = `<div class="empty">${ICONS.doc}<div>
+      Пока нет ни одной бригады.<br>Нажмите <b>«+ Блок»</b>, чтобы создать первую.</div></div>`;
+    return;
+  }
+  blocksCache.forEach(b => root.appendChild(renderRow(b)));
+}
+function renderRow(b) {
+  const el = document.getElementById("rowTpl").content.cloneNode(true).querySelector(".row");
+  el.querySelector(".row-name").textContent = b.name || "Без названия";
+  const n = b.workers.length;
+  el.querySelector(".row-sub").textContent =
+    `${n} ${plural(n, "работник", "работника", "работников")} · ${objShort(b.object_key)} · ${taskShort(b.task)}`;
+  if (selected.has(b.id)) el.classList.add("selected");
+  attachLongPress(el, () => {
+    if (!selectionMode) setSelecting(true);
+    if (navigator.vibrate) navigator.vibrate(15);
+    toggleBlockSelect(b.id, el);
+  });
+  el.addEventListener("click", () => {
+    if (Date.now() - lastLongPress < 500) return;
+    if (selectionMode) { toggleBlockSelect(b.id, el); return; }
+    openDetail(b.id);
+  });
+  return el;
+}
 
-function renderBlock(b) {
-  const tpl = document.getElementById("blockTpl").content.cloneNode(true);
-  const el = tpl.querySelector(".block");
-  el.dataset.id = b.id;
+/* ---------- экран одной бригады (detail) ---------- */
+function showList() {
+  currentBlockId = null;
+  document.body.classList.remove("detail");
+  document.getElementById("detailView").innerHTML = "";
+  load();
+  window.scrollTo(0, 0);
+}
+async function openDetail(id) {
+  let b = blocksCache.find(x => x.id === id);
+  if (!b) { try { blocksCache = await api("/blocks"); b = blocksCache.find(x => x.id === id); } catch (e) {} }
+  if (!b) { toast("Бригада не найдена", "error"); return; }
+  currentBlockId = id;
+  document.body.classList.add("detail");
+  if (!(history.state && history.state.detail)) history.pushState({ detail: id }, "");
 
-  const name = el.querySelector(".blockname");
+  const dn = document.getElementById("detailName");
+  dn.value = b.name;
+  dn.oninput = debounce(() => jpatch("/blocks/" + id, { name: dn.value }).catch(() => {}));
+  document.getElementById("detailDelete").onclick = async () => {
+    const ok = await confirmModal({ title: "Удалить бригаду?", message: `«${b.name || "без названия"}» и все её сохранённые ФИО будут удалены.`, okText: "Удалить", danger: true });
+    if (ok) { try { await api("/blocks/" + id, { method: "DELETE" }); toast("Бригада удалена", "ok"); showList(); } catch (e) { toast(e.message, "error"); } }
+  };
+
+  const view = document.getElementById("detailView");
+  view.innerHTML = "";
+  view.appendChild(buildDetail(b));
+  window.scrollTo(0, 0);
+}
+async function refreshDetail() {
+  try { blocksCache = await api("/blocks"); } catch (e) { return; }
+  const b = blocksCache.find(x => x.id === currentBlockId);
+  if (!b) return;
+  const view = document.getElementById("detailView");
+  view.innerHTML = "";
+  view.appendChild(buildDetail(b));
+}
+
+function buildDetail(b) {
+  const el = document.getElementById("detailTpl").content.cloneNode(true).querySelector(".block");
+
   const company = el.querySelector(".company");
-  name.value = b.name; company.value = b.company || "";
-
-  const patch = debounce(() => jpatch("/blocks/" + b.id, { name: name.value, company: company.value }).catch(() => {}));
-  name.addEventListener("input", patch);
-  company.addEventListener("input", () => { company.classList.remove("invalid"); patch(); });
+  company.value = b.company || "";
+  company.addEventListener("input", e => { e.target.classList.remove("invalid"); });
+  company.addEventListener("input", debounce(() => jpatch("/blocks/" + b.id, { company: company.value }).catch(() => {})));
 
   el.querySelector(".workplace").addEventListener("input", e => e.target.classList.remove("invalid"));
 
@@ -203,20 +243,8 @@ function renderBlock(b) {
 
   el.querySelector(".addWorker").addEventListener("click", async (ev) => {
     ev.currentTarget.disabled = true;
-    try { await jpost("/blocks/" + b.id + "/workers", { full_name: "" }); await load(); }
+    try { await jpost("/blocks/" + b.id + "/workers", { full_name: "" }); await refreshDetail(); }
     catch (e) { toast(e.message, "error"); ev.currentTarget.disabled = false; }
-  });
-
-  // выбор по долгому нажатию
-  if (selected.has(b.id)) el.classList.add("selected");
-  attachLongPress(el, () => {
-    if (!selectionMode) setSelecting(true);
-    if (navigator.vibrate) navigator.vibrate(15);
-    toggleBlockSelect(b.id, el);
-  });
-  el.querySelector(".select-overlay").addEventListener("click", () => {
-    if (Date.now() - lastLongPress < 500) return; // не отменять только что выбранный долгим нажатием
-    toggleBlockSelect(b.id, el);
   });
 
   el.querySelector(".doSubmit").addEventListener("click", () => doSubmit(el, b));
@@ -245,7 +273,7 @@ function renderWorker(w, index) {
   inp.addEventListener("input", debounce(() => jpatch("/workers/" + w.id, { full_name: inp.value }).catch(() => {})));
   const del = document.createElement("button");
   del.className = "icon"; del.type = "button"; del.innerHTML = ICONS.close; del.title = "Удалить";
-  del.addEventListener("click", async () => { try { await api("/workers/" + w.id, { method: "DELETE" }); load(); } catch (e) { toast(e.message, "error"); } });
+  del.addEventListener("click", async () => { try { await api("/workers/" + w.id, { method: "DELETE" }); await refreshDetail(); } catch (e) { toast(e.message, "error"); } });
   div.appendChild(num); div.appendChild(inp); div.appendChild(del);
   return div;
 }
@@ -264,15 +292,13 @@ async function doSubmit(el, b) {
   const names = [...el.querySelectorAll(".worker input")].map(i => i.value.trim()).filter(Boolean);
   if (!names.length) { toast("В бригаде нет ни одного ФИО", "error"); return; }
 
-  const taskLabel = task === "demontazh" ? "Демонтаж лесов" : "Монтаж лесов";
-  const objLabel = object_key === "sulphide_2" ? "Сульфидная фабрика 2" : "Сульфидная фабрика 1";
   const ok = await confirmModal({
     title: "Отправить форму SLAM?",
     message: "Будет отправлена реальная форма на каждого работника бригады.",
     summaryRows: [
       ["Работников", String(names.length)],
-      ["Тип работ", taskLabel],
-      ["Объект", objLabel],
+      ["Тип работ", taskLabel(task)],
+      ["Объект", objLabel(object_key)],
       ["Подрядчик", company],
     ],
     okText: `Отправить (${names.length})`,
@@ -338,15 +364,26 @@ async function pollJob(jobId, el, btn) {
   tick();
 }
 
-/* ---------- создание блока ---------- */
+/* ---------- глобальные кнопки ---------- */
 document.getElementById("addBlock").addEventListener("click", async () => {
   const name = await promptModal({ title: "Новая бригада", label: "Название блока (бригады)", value: "Бригада", placeholder: "Например: Бригада Иванова" });
   if (name === null) return;
-  try { await jpost("/blocks", { name }); toast("Блок создан", "ok"); load(); }
-  catch (e) { toast(e.message, "error"); }
+  try {
+    const nb = await jpost("/blocks", { name });
+    blocksCache.push(nb);
+    toast("Бригада создана", "ok");
+    openDetail(nb.id);     // сразу открываем её форму, выйти можно кнопкой «Назад»
+  } catch (e) { toast(e.message, "error"); }
 });
 
+document.getElementById("backBtn").addEventListener("click", () => {
+  if (history.state && history.state.detail) history.back();   // вызовет popstate -> showList
+  else showList();
+});
 document.getElementById("selCancel").addEventListener("click", () => setSelecting(false));
 document.getElementById("selDelete").addEventListener("click", deleteSelected);
+
+// аппаратная/браузерная «Назад» возвращает к списку, а не закрывает приложение
+window.addEventListener("popstate", () => { if (document.body.classList.contains("detail")) showList(); });
 
 load();
