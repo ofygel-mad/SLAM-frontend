@@ -2,93 +2,215 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e151d">
 <title>SLAM — автозаполнение</title>
 <style>
-  :root { --bg:#0f1720; --card:#1b2733; --line:#2c3a48; --accent:#2e8b57;
-          --accent2:#3a7bd5; --text:#e8eef3; --muted:#90a0b0; --danger:#c0504d; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
-         background:var(--bg); color:var(--text); padding-bottom:60px; }
-  header { padding:16px; background:var(--card); position:sticky; top:0; z-index:5;
-           border-bottom:1px solid var(--line); display:flex; justify-content:space-between;
-           align-items:center; }
-  header h1 { font-size:18px; margin:0; }
-  .wrap { max-width:680px; margin:0 auto; padding:14px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
-          padding:14px; margin-bottom:16px; }
-  .row { display:flex; gap:8px; align-items:center; }
-  .row.wrap-row { flex-wrap:wrap; }
-  label { font-size:13px; color:var(--muted); display:block; margin:10px 0 4px; }
+  :root {
+    --bg:#0e151d; --bg2:#0b1219; --card:#18232f; --card2:#1f2d3b;
+    --line:#2b3a49; --line2:#36495b;
+    --text:#eaf1f7; --muted:#8ea0b2; --muted2:#6f8295;
+    --accent:#2fa566; --accent-h:#37bd76;
+    --blue:#3a7bd5; --blue-h:#4a8be6;
+    --danger:#d35650; --danger-h:#e46760;
+    --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; }
+  body {
+    font-family:-apple-system,Segoe UI,Roboto,Inter,sans-serif;
+    background:radial-gradient(1200px 600px at 50% -10%, #16222e 0%, var(--bg) 55%) fixed;
+    color:var(--text); line-height:1.45;
+    padding-bottom:calc(40px + env(safe-area-inset-bottom));
+  }
+  header { padding-top:calc(14px + env(safe-area-inset-top)); }
+
+  header {
+    padding:14px 16px; background:rgba(18,27,36,.85);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    position:sticky; top:0; z-index:20; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+  }
+  header .brand { display:flex; align-items:center; gap:10px; }
+  header .logo { width:30px; height:30px; border-radius:8px; flex:none;
+    background:linear-gradient(135deg,var(--accent),var(--blue)); display:grid; place-items:center;
+    font-weight:800; font-size:14px; color:#fff; }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.2px; }
+  header .sub { font-size:11px; color:var(--muted2); margin-top:1px; }
+
+  .wrap { max-width:680px; margin:0 auto; padding:16px 14px; }
+
+  .card {
+    background:linear-gradient(180deg,var(--card),var(--bg2));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; margin-bottom:18px; box-shadow:var(--shadow);
+    animation:rise .25s ease both;
+  }
+  @keyframes rise { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+
+  .block-head { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .blockname {
+    font-size:17px; font-weight:650; border:none; background:transparent; color:var(--text);
+    padding:6px 8px; flex:1; border-radius:8px; min-width:0;
+  }
+  .blockname:focus { background:var(--bg2); outline:1px solid var(--line2); }
+
+  label { font-size:12px; color:var(--muted); display:block; margin:13px 2px 5px; font-weight:500; }
+  label .req { color:var(--danger); }
+
   input[type=text], textarea {
-    width:100%; background:#0f1720; border:1px solid var(--line); color:var(--text);
-    border-radius:9px; padding:11px; font-size:15px; }
+    width:100%; background:var(--bg2); border:1px solid var(--line); color:var(--text);
+    border-radius:10px; padding:12px; font-size:16px; /* >=16px: iOS Safari не зумит при фокусе */
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input[type=text]:focus, textarea:focus {
+    outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(58,123,213,.18);
+  }
   textarea { min-height:64px; resize:vertical; }
-  .blockname { font-size:17px; font-weight:600; border:none; background:transparent;
-               padding:4px 0; }
-  button { border:none; border-radius:9px; padding:11px 14px; font-size:15px;
-           cursor:pointer; color:#fff; background:var(--accent2); }
-  button.green { background:var(--accent); width:100%; font-weight:600; padding:14px; font-size:16px; }
-  button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); }
-  button.del { background:transparent; color:var(--danger); padding:8px; }
-  .seg { display:flex; gap:6px; }
-  .seg button { flex:1; background:#0f1720; border:1px solid var(--line); color:var(--muted); }
-  .seg button.active { background:var(--accent2); color:#fff; border-color:var(--accent2); }
-  .worker { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .invalid { border-color:var(--danger) !important; box-shadow:0 0 0 3px rgba(211,86,80,.18) !important; }
+
+  button { border:none; border-radius:10px; padding:11px 14px; font-size:15px; cursor:pointer;
+    color:#fff; background:var(--blue); font-weight:600; transition:background .15s, transform .05s; }
+  button:active { transform:translateY(1px); }
+  button:hover { background:var(--blue-h); }
+  button:disabled { opacity:.6; cursor:default; }
+  button.green { background:var(--accent); width:100%; padding:15px; font-size:16px; }
+  button.green:hover { background:var(--accent-h); }
+  button.ghost { background:transparent; border:1px solid var(--line2); color:var(--muted); font-weight:500; }
+  button.ghost:hover { background:var(--card2); color:var(--text); }
+  button.icon { background:transparent; color:var(--muted2); padding:8px; font-size:16px; }
+  button.icon:hover { background:var(--card2); color:var(--danger); }
+
+  .seg { display:flex; gap:8px; }
+  .seg button { flex:1; background:var(--bg2); border:1px solid var(--line); color:var(--muted); font-weight:500; }
+  .seg button:hover { background:var(--card2); color:var(--text); }
+  .seg button.active { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; }
+  .seg.object button.active { background:var(--accent); border-color:var(--accent); }
+
+  .workers { margin-bottom:8px; }
+  .worker { display:flex; gap:8px; align-items:center; margin-bottom:8px; animation:rise .2s ease both; }
+  .worker .num { width:22px; text-align:center; color:var(--muted2); font-size:13px; flex:none; }
   .worker input { flex:1; }
+
+  .divider { height:1px; background:var(--line); margin:16px -16px; }
+
   .muted { color:var(--muted); font-size:13px; }
-  .results { margin-top:12px; }
-  .res { padding:8px 10px; border-radius:8px; margin-bottom:6px; font-size:14px;
-         background:#0f1720; border-left:4px solid var(--line); }
+  .hint { color:var(--muted2); font-size:11px; margin:4px 2px 0; }
+
+  .empty { text-align:center; color:var(--muted2); padding:48px 16px; }
+  .empty .big { font-size:42px; margin-bottom:10px; opacity:.6; }
+
+  /* прогресс */
+  .progressWrap { margin-top:14px; padding-top:14px; border-top:1px dashed var(--line); }
+  .bar { height:8px; background:var(--bg2); border-radius:6px; overflow:hidden; margin:8px 0; }
+  .bar > div { height:100%; background:linear-gradient(90deg,var(--accent),var(--blue)); width:0%; transition:width .35s; }
+  .results { margin-top:10px; }
+  .res { padding:10px 12px; border-radius:10px; margin-bottom:8px; font-size:14px;
+    background:var(--bg2); border-left:4px solid var(--line); }
   .res.ok { border-left-color:var(--accent); }
   .res.failed { border-left-color:var(--danger); }
-  .res.running { border-left-color:var(--accent2); }
-  .res .errs { color:#e7a; font-size:12px; margin-top:4px; white-space:pre-wrap; }
-  .bar { height:8px; background:#0f1720; border-radius:6px; overflow:hidden; margin:8px 0; }
-  .bar > div { height:100%; background:var(--accent); width:0%; transition:width .3s; }
-  .spacer { height:8px; }
-  details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:4px; }
-  details pre { white-space:pre-wrap; font-size:12px; color:var(--muted); }
+  .res.running { border-left-color:var(--blue); }
+  .res .errs { color:#eb9; font-size:12px; margin-top:5px; white-space:pre-wrap; }
+  details summary { cursor:pointer; color:var(--muted2); font-size:12px; margin-top:6px;
+    -webkit-user-select:none; user-select:none; }
+  details pre { white-space:pre-wrap; font-size:12px; color:var(--muted); background:var(--bg);
+    padding:8px; border-radius:8px; margin-top:6px; }
+
+  /* модалка */
+  .overlay { position:fixed; inset:0; background:rgba(4,8,12,.6);
+    -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+    display:grid; place-items:center; z-index:50; padding:18px; animation:fade .15s ease both; }
+  @keyframes fade { from{opacity:0} to{opacity:1} }
+  .modal { width:100%; max-width:420px; background:linear-gradient(180deg,var(--card2),var(--card));
+    border:1px solid var(--line2); border-radius:16px; padding:20px; box-shadow:var(--shadow);
+    animation:pop .18s cubic-bezier(.2,.8,.3,1.1) both; }
+  @keyframes pop { from{opacity:0; transform:scale(.95) translateY(6px)} to{opacity:1; transform:none} }
+  .modal h3 { margin:0 0 6px; font-size:18px; }
+  .modal p { margin:0 0 14px; color:var(--muted); font-size:14px; }
+  .modal .actions { display:flex; gap:10px; margin-top:18px; }
+  .modal .actions button { flex:1; }
+  .modal .summary { background:var(--bg2); border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-size:13px; margin-bottom:6px; }
+  .modal .summary div { display:flex; justify-content:space-between; gap:10px; padding:3px 0; }
+  .modal .summary b { color:var(--text); font-weight:600; text-align:right; }
+  .modal .summary span { color:var(--muted); }
+
+  /* тосты */
+  #toasts { position:fixed; left:0; right:0; z-index:60; display:flex;
+    flex-direction:column; align-items:center; gap:8px; pointer-events:none; padding:0 14px;
+    bottom:calc(18px + env(safe-area-inset-bottom)); }
+  .toast { background:var(--card2); border:1px solid var(--line2); color:var(--text);
+    padding:12px 16px; border-radius:12px; font-size:14px; box-shadow:var(--shadow);
+    max-width:420px; width:100%; animation:rise .2s ease both; border-left:4px solid var(--blue); }
+  .toast.ok { border-left-color:var(--accent); }
+  .toast.err { border-left-color:var(--danger); }
+
+  /* узкие экраны телефонов */
+  @media (max-width:480px) {
+    .wrap { padding:12px 10px; }
+    .card { padding:14px; border-radius:12px; }
+    header h1 { font-size:15px; }
+    header .sub { display:none; }
+    .seg button { padding:11px 6px; font-size:14px; }
+    .divider { margin:14px -14px; }
+    .modal { padding:18px; border-radius:14px; }
+  }
+  @media (max-width:360px) {
+    .seg { gap:6px; }
+    .seg button { font-size:13px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>SLAM — автозаполнение</h1>
+  <div class="brand">
+    <div class="logo">SL</div>
+    <div>
+      <h1>SLAM — автозаполнение</h1>
+      <div class="sub">оценка рисков · заполнение за бригаду</div>
+    </div>
+  </div>
   <button id="addBlock">+ Блок</button>
 </header>
+
 <div class="wrap" id="blocks"></div>
+
+<div id="toasts"></div>
 
 <template id="blockTpl">
   <div class="card block">
-    <div class="row">
+    <div class="block-head">
       <input class="blockname" type="text" placeholder="Название блока (бригады)">
-      <button class="del delBlock" title="Удалить блок">🗑</button>
+      <button class="icon delBlock" title="Удалить блок">🗑</button>
     </div>
 
-    <label>Подрядная организация (сохраняется)</label>
+    <label>Подрядная организация <span class="hint" style="display:inline">— сохраняется</span></label>
     <input class="company" type="text" placeholder="Например: ТОО «СтройМонтаж»">
 
-    <label>Тип работ (вопрос 3)</label>
+    <label>Тип работ <span class="muted">(вопрос 3)</span></label>
     <div class="seg task">
-      <button data-v="montazh">Монтаж лесов</button>
-      <button data-v="demontazh">Демонтаж лесов</button>
+      <button data-v="montazh">🔧 Монтаж лесов</button>
+      <button data-v="demontazh">🔩 Демонтаж лесов</button>
     </div>
 
-    <label>Объект (вопрос 5)</label>
+    <label>Объект <span class="muted">(вопрос 5)</span></label>
     <div class="seg object">
       <button data-v="sulphide_1">Сульфид 1</button>
       <button data-v="sulphide_2">Сульфид 2</button>
     </div>
 
-    <label>Наименование рабочего места (меняется каждый раз, НЕ сохраняется)</label>
+    <label>Наименование рабочего места <span class="req">*</span></label>
     <textarea class="workplace" placeholder="Где именно проводятся работы"></textarea>
+    <div class="hint">Меняется каждый раз и НЕ сохраняется.</div>
 
-    <label>Бригада (ФИО — сохраняются)</label>
+    <div class="divider"></div>
+
+    <label>Бригада <span class="muted">(ФИО — сохраняются)</span></label>
     <div class="workers"></div>
-    <button class="ghost addWorker">+ Добавить работника</button>
+    <button class="ghost addWorker" style="width:100%">+ Добавить работника</button>
 
-    <div class="spacer"></div>
-    <button class="green doSubmit">Отправить (заполнить за всю бригаду)</button>
+    <div style="height:14px"></div>
+    <button class="green doSubmit">Отправить за всю бригаду</button>
 
     <div class="progressWrap" style="display:none">
       <div class="bar"><div class="fill"></div></div>
