@@ -1,14 +1,33 @@
 "use strict";
 // Адрес бэкенда задаётся в config.js (генерируется из переменной BACKEND_URL при деплое).
 const API_BASE = (window.API_BASE || "").replace(/\/$/, "");
-const api = (p, opt) => fetch(API_BASE + "/api" + p, opt).then(r => {
-  if (!r.ok) return r.json().then(e => { throw new Error(e.detail || r.statusText); });
-  return r.json();
-});
+const formatApiDetail = detail => {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map(x => x.msg || x.message || JSON.stringify(x)).join("; ");
+  return detail.message || JSON.stringify(detail);
+};
+const api = async (p, opt) => {
+  let r;
+  try {
+    r = await fetch(API_BASE + "/api" + p, opt);
+  } catch (e) {
+    throw new Error("Нет связи с сервером: " + e.message);
+  }
+  const text = await r.text();
+  let data = null;
+  if (text) {
+    try { data = JSON.parse(text); } catch (e) {}
+  }
+  if (!r.ok) {
+    throw new Error(formatApiDetail(data && data.detail) || formatApiDetail(data) || text || r.statusText || `HTTP ${r.status}`);
+  }
+  return data;
+};
 const jpost = (p, body) => api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const jpatch = (p, body) => api(p, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const debounce = (fn, ms = 600) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
-const esc = s => (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const plural = (n, one, few, many) => {
   const m10 = n % 10, m100 = n % 100;
   if (m10 === 1 && m100 !== 11) return one;
@@ -252,11 +271,13 @@ function buildDetail(b) {
 }
 
 function setupSeg(seg, value, onPick) {
-  seg.querySelectorAll("button").forEach(btn => {
+  const buttons = [...seg.querySelectorAll("button")];
+  const active = buttons.find(btn => btn.dataset.v === value) || buttons[0];
+  buttons.forEach(btn => {
     btn.type = "button";
-    if (btn.dataset.v === value) btn.classList.add("active");
+    if (btn === active) btn.classList.add("active");
     btn.addEventListener("click", () => {
-      seg.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+      buttons.forEach(x => x.classList.remove("active"));
       btn.classList.add("active");
       onPick(btn.dataset.v);
     });
@@ -289,6 +310,7 @@ async function doSubmit(el, b) {
 
   if (!company) { companyEl.classList.add("invalid"); companyEl.scrollIntoView({ behavior: "smooth", block: "center" }); toast("Укажите подрядную организацию", "error"); return; }
   if (!workplace) { wpEl.classList.add("invalid"); wpEl.focus(); toast("Укажите наименование рабочего места", "error"); return; }
+  if (!task || !object_key) { toast("Выберите тип работ и объект", "error"); return; }
   const names = [...el.querySelectorAll(".worker input")].map(i => i.value.trim()).filter(Boolean);
   if (!names.length) { toast("В бригаде нет ни одного ФИО", "error"); return; }
 
@@ -324,9 +346,16 @@ async function pollJob(jobId, el, btn) {
   const ptext = el.querySelector(".progressText");
   const rbox = el.querySelector(".results");
   const tick = async () => {
+    if (!document.body.contains(el)) return;
     let j;
     try { j = await api("/jobs/" + jobId); }
-    catch (e) { toast("Потеряна связь с задачей: " + e.message, "error"); btn.disabled = false; btn.textContent = "Отправить за всю бригаду"; return; }
+    catch (e) {
+      toast("Потеряна связь с задачей: " + e.message, "error");
+      if (document.body.contains(btn)) {
+        btn.disabled = false; btn.textContent = "Отправить за всю бригаду";
+      }
+      return;
+    }
 
     fill.style.width = (j.total ? Math.round(j.done / j.total * 100) : 0) + "%";
     const statusRu = { queued: "в очереди", running: "выполняется", done: "готово", error: "ошибка" }[j.status] || j.status;
